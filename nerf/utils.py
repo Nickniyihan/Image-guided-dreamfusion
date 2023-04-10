@@ -3,6 +3,7 @@ import glob
 import tqdm
 import math
 import imageio
+import requests
 import random
 import warnings
 import tensorboardX
@@ -14,6 +15,8 @@ from datetime import datetime
 
 import cv2
 import matplotlib.pyplot as plt
+from PIL import Image
+from diffusers.utils import load_image
 
 import torch
 import torch.nn as nn
@@ -21,6 +24,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torch.distributed as dist
 from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
 
 import trimesh
 from rich.console import Console
@@ -212,10 +216,12 @@ class Trainer(object):
             for p in self.guidance.parameters():
                 p.requires_grad = False
 
-            self.prepare_text_embeddings()
+            # self.prepare_text_embeddings()
+            self.prepare_all_embeddings()
         
         else:
             self.text_z = None
+            self.image_z = None
         
         # try out torch 2.0
         if torch.__version__[0] == '2':
@@ -324,6 +330,88 @@ class Trainer(object):
                 
                 text_z = self.guidance.get_text_embeds([text], [negative_text])
                 self.text_z.append(text_z)
+    
+    def prepare_all_embeddings(self):
+        if self.opt.image is None:
+            self.log(f"[WARN] image filepath is not provided.")
+            self.image_z = None
+            return
+
+        if self.opt.guidance=="clip":
+            image = Image.open(requests.get(self.opt.image, stream=True).raw)
+            convert_tensor = transforms.ToTensor()
+            image = convert_tensor(image)
+            image = image.unsqueeze(0)
+            image = self.clip_normalize(image)
+        else:
+            # image = load_image(self.opt.image)
+            image = Image.open(requests.get(self.opt.image, stream=True).raw) # PIL format for encoding
+
+        # self.image_z = self.guidance.get_image_embeds(image)
+
+        if not self.opt.dir_text:
+            # self.text_z = self.guidance.get_text_embeds([self.opt.text], [self.opt.negative])
+
+            # TODO: alternate method??
+            self.text_z = self.guidance.pipeline._encode_prompt(
+                prompt=[self.opt.text],
+                device=self.device,
+                num_images_per_prompt=1,
+                do_classifier_free_guidance=True,
+                negative_prompt=[self.opt.negative],
+                prompt_embeds=None,
+                negative_prompt_embeds=None,
+            )
+        else:
+            self.text_z = []
+            for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
+                # construct dir-encoded text
+                text = f"{self.opt.text}, {d} view"
+                negative_text = f"{self.opt.negative}"
+
+                # explicit negative dir-encoded text
+                if self.opt.suppress_face:
+                    if negative_text != '': negative_text += ', '
+
+                    if d == 'back':
+                        negative_text += "face"
+                    # elif d == 'front': negative_text += ""
+                    elif d == 'side':
+                        negative_text += "face"
+                    elif d == 'overhead':
+                        negative_text += "face"
+                    elif d == 'bottom':
+                        negative_text += "face"
+
+                text_z = self.guidance.pipeline._encode_prompt(
+                    prompt=text,
+                    device=self.device,
+                    num_images_per_prompt=1,
+                    do_classifier_free_guidance=True,
+                    negative_prompt=negative_text,
+                    prompt_embeds=None,
+                    negative_prompt_embeds=None,
+                )
+                self.text_z.append(text_z)
+
+        # Image embedding
+        if self.text_z is not None and isinstance(self.text_z, list):
+            batch_size = len(self.text_z)
+        else:
+            batch_size = 1
+        batch_size = batch_size * 1
+        # print(batch_size)
+        noise_level = torch.tensor([0], device=self.device)
+        self.image_z = self.guidance.pipeline._encode_image(
+            image=image,
+            device=self.device,
+            batch_size=1,
+            num_images_per_prompt=1,
+            do_classifier_free_guidance=True,
+            noise_level=noise_level,
+            generator=None,
+            image_embeds=None,
+        )
 
     def __del__(self):
         if self.log_ptr: 
@@ -380,6 +468,10 @@ class Trainer(object):
         else:
             pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
 
+        # plt.imshow(pred_rgb.detach().permute(0, 2, 3, 1).cpu().numpy()[0, ...])
+        # plt.axis('off')
+        # plt.show()
+
         # text embeddings
         if self.opt.dir_text:
             dirs = data['dir'] # [B,]
@@ -388,7 +480,8 @@ class Trainer(object):
             text_z = self.text_z
         
         # encode pred_rgb to latents
-        loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent)
+        image_z = self.image_z if dirs.item() == self.opt.image_dir and else None
+        loss = self.guidance.train_step(text_z, image_z, pred_rgb)
 
         # regularizations
         if not self.opt.dmtet:
@@ -490,7 +583,7 @@ class Trainer(object):
 
     def train(self, train_loader, valid_loader, max_epochs):
 
-        assert self.text_z is not None, 'Training must provide a text prompt!'
+        # assert self.text_z is not None, 'Training must provide a text prompt!'
 
         if self.use_tensorboardX and self.local_rank == 0:
             self.writer = tensorboardX.SummaryWriter(os.path.join(self.workspace, "run", self.name))

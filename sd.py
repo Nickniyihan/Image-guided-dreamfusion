@@ -1,5 +1,6 @@
 from transformers import CLIPTextModel, CLIPTokenizer, logging
 from diffusers import AutoencoderKL, UNet2DConditionModel, PNDMScheduler, DDIMScheduler, StableDiffusionPipeline
+from diffusers import StableUnCLIPImg2ImgPipeline
 from diffusers.utils.import_utils import is_xformers_available
 from os.path import isfile
 
@@ -52,7 +53,8 @@ class StableDiffusion(nn.Module):
             print(f'[INFO] using hugging face custom model key: {hf_key}')
             model_key = hf_key
         elif self.sd_version == '2.1':
-            model_key = "stabilityai/stable-diffusion-2-1-base"
+            # model_key = "stabilityai/stable-diffusion-2-1-base"
+            model_key = "stabilityai/stable-diffusion-2-1-unclip"
         elif self.sd_version == '2.0':
             model_key = "stabilityai/stable-diffusion-2-base"
         elif self.sd_version == '1.5':
@@ -64,6 +66,18 @@ class StableDiffusion(nn.Module):
 
         # Create model
         pipe = StableDiffusionPipeline.from_pretrained(model_key, torch_dtype=precision_t)
+        # Use pipeline models
+        # self.pipeline = StableUnCLIPImg2ImgPipeline.from_pretrained(
+        #     model_key, torch_dtype=torch.float16, variation="fp16"
+        # ).to(self.device)
+
+        # self.vae = self.pipeline.vae
+        # self.tokenizer = self.pipeline.tokenizer
+        # self.text_encoder = self.pipeline.text_encoder
+        # self.image_normalizer = self.pipeline.image_normalizer
+        # self.text_encoder = self.pipeline.text_encoder
+        # self.unet = self.pipeline.unet
+        # self.image_encoder = self.pipeline.image_encoder
 
         if isfile('./unet_traced.pt'):
             # use jitted unet
@@ -148,7 +162,22 @@ class StableDiffusion(nn.Module):
             #torch.save(latent_model_input, "train_latent_model_input.pt")
             #torch.save(t, "train_t.pt")
             #torch.save(text_embeddings, "train_text_embeddings.pt")
-            noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+            
+            # noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+            # TODO: alternative here!
+            if image_embeds is not None:
+                noise_pred = self.unet(
+                    latent_model_input,
+                    t,
+                    encoder_hidden_states=prompt_embeds,
+                    class_labels=image_embeds
+                ).sample
+            else:
+                noise_pred = self.unet_no_dir(
+                    latent_model_input,
+                    t,
+                    encoder_hidden_states=prompt_embeds
+                ).sample
 
         # perform guidance (high scale from paper!)
         noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
