@@ -65,7 +65,7 @@ class StableDiffusion(nn.Module):
         precision_t = torch.float16 if fp16 else torch.float32
 
         # Create model
-        pipe = StableDiffusionPipeline.from_pretrained(model_key, torch_dtype=precision_t)
+        pipe = StableUnCLIPImg2ImgPipeline.from_pretrained(model_key, torch_dtype=precision_t)
         # Use pipeline models
         # self.pipeline = StableUnCLIPImg2ImgPipeline.from_pretrained(
         #     model_key, torch_dtype=torch.float16, variation="fp16"
