@@ -478,7 +478,7 @@ class Trainer(object):
         
         # encode pred_rgb to latents
         # image_z = self.image_z if dirs.item() == self.opt.image_dir and else None
-        loss = self.guidance.train_step(text_z, image_z, pred_rgb)
+        loss = self.guidance.train_step(text_z, self.image_z, pred_rgb)
 
         # regularizations
         if not self.opt.dmtet:
