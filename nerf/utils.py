@@ -368,20 +368,17 @@ class Trainer(object):
                 # construct dir-encoded text
                 text = f"{self.opt.text}, {d} view"
                 negative_text = f"{self.opt.negative}"
+                noise_level = 0
 
                 # explicit negative dir-encoded text
                 if self.opt.suppress_face:
                     if negative_text != '': negative_text += ', '
 
-                    if d == 'back':
-                        negative_text += "face"
+                    if d == 'back': negative_text += "face"
                     # elif d == 'front': negative_text += ""
-                    elif d == 'side':
-                        negative_text += "face"
-                    elif d == 'overhead':
-                        negative_text += "face"
-                    elif d == 'bottom':
-                        negative_text += "face"
+                    elif d == 'side': negative_text += "face"
+                    elif d == 'overhead': negative_text += "face"
+                    elif d == 'bottom': negative_text += "face"
 
                 text_z = self.guidance.pipeline._encode_prompt(
                     prompt=text,
@@ -480,7 +477,7 @@ class Trainer(object):
             text_z = self.text_z
         
         # encode pred_rgb to latents
-        image_z = self.image_z if dirs.item() == self.opt.image_dir and else None
+        # image_z = self.image_z if dirs.item() == self.opt.image_dir and else None
         loss = self.guidance.train_step(text_z, image_z, pred_rgb)
 
         # regularizations
