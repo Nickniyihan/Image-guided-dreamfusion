@@ -373,7 +373,6 @@ class Trainer(object):
                 # explicit negative dir-encoded text
                 if self.opt.suppress_face:
                     if negative_text != '': negative_text += ', '
-
                     if d == 'back': 
                         negative_text += "face"
                         noise_level = 0.5
@@ -384,7 +383,8 @@ class Trainer(object):
                     elif d == 'overhead': 
                         negative_text += "face"
                         noise_level = 0.4
-                    elif d == 'bottom': negative_text += "face"
+                    elif d == 'bottom': 
+                        negative_text += "face"
                         noise_level = 0.6
 
                 text_z = self.guidance.pipe._encode_prompt(
