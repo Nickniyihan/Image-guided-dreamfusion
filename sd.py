@@ -65,7 +65,7 @@ class StableDiffusion(nn.Module):
         precision_t = torch.float16 if fp16 else torch.float32
 
         # Create model
-        pipe = StableUnCLIPImg2ImgPipeline.from_pretrained(model_key, torch_dtype=precision_t)
+        self.pipe = StableUnCLIPImg2ImgPipeline.from_pretrained(model_key, torch_dtype=precision_t)
         # Use pipeline models
         # self.pipeline = StableUnCLIPImg2ImgPipeline.from_pretrained(
         #     model_key, torch_dtype=torch.float16, variation="fp16"
@@ -91,23 +91,23 @@ class StableDiffusion(nn.Module):
                 def forward(self, latent_model_input, t, encoder_hidden_states):
                     sample = unet_traced(latent_model_input, t, encoder_hidden_states)[0]
                     return UNet2DConditionOutput(sample=sample)
-            pipe.unet = TracedUNet()
+            self.pipe.unet = TracedUNet()
 
         if vram_O:
-            pipe.enable_sequential_cpu_offload()
-            pipe.enable_vae_slicing()
-            pipe.unet.to(memory_format=torch.channels_last)
-            pipe.enable_attention_slicing(1)
+            self.pipe.enable_sequential_cpu_offload()
+            self.pipe.enable_vae_slicing()
+            self.pipe.unet.to(memory_format=torch.channels_last)
+            self.pipe.enable_attention_slicing(1)
             # pipe.enable_model_cpu_offload()
         else:
             if is_xformers_available():
-                pipe.enable_xformers_memory_efficient_attention()
-            pipe.to(device)
+                self.pipe.enable_xformers_memory_efficient_attention()
+            self.pipe.to(device)
 
-        self.vae = pipe.vae
-        self.tokenizer = pipe.tokenizer
-        self.text_encoder = pipe.text_encoder
-        self.unet = pipe.unet
+        self.vae = self.pipe.vae
+        self.tokenizer = self.pipe.tokenizer
+        self.text_encoder = self.pipe.text_encoder
+        self.unet = self.pipe.unet
 
         self.scheduler = DDIMScheduler.from_pretrained(model_key, subfolder="scheduler", torch_dtype=precision_t)
 

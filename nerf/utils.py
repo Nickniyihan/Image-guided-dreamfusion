@@ -353,7 +353,7 @@ class Trainer(object):
             # self.text_z = self.guidance.get_text_embeds([self.opt.text], [self.opt.negative])
 
             # TODO: alternate method??
-            self.text_z = self.guidance.pipeline._encode_prompt(
+            self.text_z = self.guidance.pipe._encode_prompt(
                 prompt=[self.opt.text],
                 device=self.device,
                 num_images_per_prompt=1,
@@ -380,7 +380,7 @@ class Trainer(object):
                     elif d == 'overhead': negative_text += "face"
                     elif d == 'bottom': negative_text += "face"
 
-                text_z = self.guidance.pipeline._encode_prompt(
+                text_z = self.guidance.pipe._encode_prompt(
                     prompt=text,
                     device=self.device,
                     num_images_per_prompt=1,
@@ -399,7 +399,7 @@ class Trainer(object):
         batch_size = batch_size * 1
         # print(batch_size)
         noise_level = torch.tensor([0], device=self.device)
-        self.image_z = self.guidance.pipeline._encode_image(
+        self.image_z = self.guidance.pipe._encode_image(
             image=image,
             device=self.device,
             batch_size=1,
